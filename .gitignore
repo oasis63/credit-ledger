@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+coverage/
+agent/cl-agent
+agent/cl-agent.exe
+.DS_Store
