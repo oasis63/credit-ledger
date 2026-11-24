@@ -42,7 +42,8 @@ export function assessRisk(input: RiskInput): RiskResult {
     score += 20;
     reasons.push(`Oldest bill is ${maxDays} days overdue`);
   } else if (maxDays > 0) {
-    score += 8;
+    // Anything overdue is at least "watch".
+    score += 20;
     reasons.push(`Bills overdue by up to ${maxDays} days`);
   }
 

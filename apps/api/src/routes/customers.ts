@@ -13,7 +13,7 @@ const amount = z.union([z.number().nonnegative(), z.string()]).transform((v, ctx
   try {
     return rupeesToPaise(v);
   } catch (e) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message });
+    ctx.addIssue({ code: 'custom', message: (e as Error).message });
     return z.NEVER;
   }
 });
@@ -21,7 +21,7 @@ const amount = z.union([z.number().nonnegative(), z.string()]).transform((v, ctx
 const phone = z.string().transform((v, ctx) => {
   const n = normalisePhone(v);
   if (!n) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter a valid 10-digit Indian mobile number' });
+    ctx.addIssue({ code: 'custom', message: 'Enter a valid 10-digit Indian mobile number' });
     return z.NEVER;
   }
   return n;

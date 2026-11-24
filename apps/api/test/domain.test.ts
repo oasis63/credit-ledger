@@ -188,3 +188,10 @@ describe('security helpers', () => {
     expect(extractInboundTexts(null)).toEqual([]);
   });
 });
+
+describe('risk thresholds', () => {
+  it('marks any overdue account as at least amber', () => {
+    const r = assessRisk({ entries: [e('a', 'invoice', 100, '2026-01-01', '2026-01-31')], credit_limit_paise: 0, open_disputes: 0, broken_promises: 0, as_of: '2026-02-10' });
+    expect(r.flag).toBe('amber');
+  });
+});

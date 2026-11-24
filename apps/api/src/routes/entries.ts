@@ -14,7 +14,7 @@ const amount = z.union([z.number().positive(), z.string()]).transform((v, ctx) =
     if (p <= 0) throw new Error('Amount must be more than zero');
     return p;
   } catch (e) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message });
+    ctx.addIssue({ code: 'custom', message: (e as Error).message });
     return z.NEVER;
   }
 });
@@ -32,13 +32,13 @@ const entryBody = z
   })
   .superRefine((v, ctx) => {
     if (v.kind === 'payment' && !v.payment_mode) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['payment_mode'], message: 'Payment mode is required' });
+      ctx.addIssue({ code: 'custom', path: ['payment_mode'], message: 'Payment mode is required' });
     }
     if (v.kind !== 'payment' && v.payment_mode) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['payment_mode'], message: 'Only payments have a mode' });
+      ctx.addIssue({ code: 'custom', path: ['payment_mode'], message: 'Only payments have a mode' });
     }
     if ((v.kind === 'adjustment_debit' || v.kind === 'adjustment_credit') && !v.note) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['note'], message: 'Adjustments need a reason' });
+      ctx.addIssue({ code: 'custom', path: ['note'], message: 'Adjustments need a reason' });
     }
   });
 

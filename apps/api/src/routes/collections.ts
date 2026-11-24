@@ -12,7 +12,7 @@ const amount = z.union([z.number().positive(), z.string()]).transform((v, ctx) =
     if (p <= 0) throw new Error('Amount must be more than zero');
     return p;
   } catch (e) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message });
+    ctx.addIssue({ code: 'custom', message: (e as Error).message });
     return z.NEVER;
   }
 });
@@ -28,7 +28,7 @@ const collectionBody = z
   .superRefine((v, ctx) => {
     if ((v.payment_mode === 'cheque' || v.payment_mode === 'upi') && !v.payment_ref) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['payment_ref'],
         message: v.payment_mode === 'cheque' ? 'Cheque number is required' : 'UPI reference (UTR) is required',
       });

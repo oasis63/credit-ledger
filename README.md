@@ -13,6 +13,14 @@ Credit and collections software for distributors and wholesalers who sell to ret
 - **Roles:** owner, accountant, salesman. Salesmen can only record collections and see their own.
 - **Multi-tenant** with Postgres **row-level security**: tenant isolation is enforced by the database, not just application code.
 
+## Screens
+
+| Owner dashboard | Retailer statement (from WhatsApp link) |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Retailer statement](docs/screenshots/retailer-statement-mobile.png) |
+
+![Customer ledger](docs/screenshots/customer.png)
+
 ## Architecture
 
 ```
@@ -57,7 +65,7 @@ cd agent && go test ./...
 
 The integration suite drops and recreates the `public` schema of the test database. **Never point `TEST_DATABASE_URL` at real data.**
 
-What the tests cover: money parsing and formatting, FIFO aging, risk rules, UPI links, signed statement tokens (tampering and expiry), the Hindi/English promise parser, password hashing, webhook signatures, and an end-to-end API run covering registration, roles, RLS isolation between tenants, ledger immutability, collections with receipts and day close, the public statement and disputes, reminders with cooldown, the signed webhook, the dashboard, and Tally sync.
+45 API tests plus Go agent tests. What they cover: money parsing and formatting, FIFO aging, risk rules, UPI links, signed statement tokens (tampering and expiry), the Hindi/English promise parser, password hashing, webhook signatures, and an end-to-end API run covering registration, roles, RLS isolation between tenants, ledger immutability, collections with receipts and day close, the public statement and disputes, reminders with cooldown, the signed webhook, the dashboard, and Tally sync.
 
 ## WhatsApp setup (Meta Cloud API)
 
