@@ -1,12 +1,7 @@
-export function rupees(paise: number | null | undefined): string {
-  if (paise == null) return '—';
-  const negative = paise < 0;
-  const abs = Math.abs(paise);
-  const whole = Math.floor(abs / 100);
-  const frac = String(abs % 100).padStart(2, '0');
-  const formatted = new Intl.NumberFormat('en-IN').format(whole);
-  return `${negative ? '-' : ''}₹${formatted}${frac === '00' ? '' : `.${frac}`}`;
-}
+import { formatRupees } from '@credit-ledger/shared';
+
+/** Same Indian-style formatting as the mobile app (shared package). */
+export const rupees = formatRupees;
 
 export function date(iso: string | null | undefined): string {
   if (!iso) return '—';

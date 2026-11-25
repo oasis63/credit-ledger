@@ -54,22 +54,8 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   return data as T;
 }
 
-// ---- Shared types (mirror the API) ----
-export type Role = 'owner' | 'accountant' | 'salesman';
-export interface User { id: string; name: string; role: Role; tenantId: string }
-export type RiskFlag = 'green' | 'amber' | 'red';
-export interface Risk { flag: RiskFlag; score: number; reasons: string[]; max_days_overdue: number; balance_paise: number }
-export interface Aging { not_due: number; d1_30: number; d31_60: number; d61_90: number; d90_plus: number }
-export interface CustomerSummary {
-  id: string; name: string; phone: string; gstin: string | null; credit_limit_paise: number; credit_days: number;
-  language: 'en' | 'hi'; balance_paise: number; overdue_paise: number; aging: Aging; risk: Risk; open_disputes: number;
-  tally_balance_paise: number | null; tally_synced_at: string | null;
-}
-export interface StatementLine {
-  id: string; kind: string; entry_date: string; due_date: string | null; reference: string | null; note?: string | null;
-  payment_mode?: string | null; payment_ref?: string | null;
-  debit_paise: number; credit_paise: number; running_balance_paise: number;
-}
+// ---- Shared types (single source of truth in packages/shared) ----
+export type { Role, User, RiskFlag, Risk, Aging, CustomerSummary, StatementLine } from '@credit-ledger/shared';
 export interface Dispute {
   id: string; customer_id: string; customer_name?: string; entry_id: string | null; reason: string; message: string | null;
   raised_by: 'retailer' | 'staff'; status: 'open' | 'resolved' | 'rejected'; resolution_note: string | null; created_at: string;

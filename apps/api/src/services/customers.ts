@@ -21,7 +21,7 @@ export const CUSTOMER_COLUMNS =
   'id, name, phone, gstin, credit_limit_paise, credit_days, language, tally_ledger_name, tally_balance_paise, tally_synced_at, created_at';
 
 export const ENTRY_COLUMNS =
-  'id, customer_id, kind, amount_paise, entry_date, due_date, reference, note, payment_mode, payment_ref, collected_by, handed_over_at, created_by, created_at';
+  'id, customer_id, kind, amount_paise, entry_date, due_date, reference, note, payment_mode, payment_ref, collected_by, handed_over_at, created_by, created_at, client_ref';
 
 export async function entriesByCustomer(tx: Tx, customerIds?: string[]): Promise<Map<string, LedgerEntry[]>> {
   const res = customerIds

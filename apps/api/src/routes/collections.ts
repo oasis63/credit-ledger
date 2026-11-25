@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { HttpError } from '../app.js';
 import { audit, withTenant } from '../db.js';
-import { todayIso } from '../domain/ledger.js';
+import { addDays, todayIso } from '../domain/ledger.js';
 import { formatRupees, rupeesToPaise } from '../domain/money.js';
 import { ENTRY_COLUMNS } from '../services/customers.js';
 
@@ -24,6 +24,10 @@ const collectionBody = z
     payment_mode: z.enum(['cash', 'cheque', 'upi', 'bank']),
     payment_ref: z.string().trim().max(100).optional(),
     note: z.string().trim().max(500).optional(),
+    // Set by the mobile app: makes retries after a lost connection safe.
+    client_ref: z.string().uuid().optional(),
+    // Date the money was actually collected (offline entries sync later).
+    collected_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   })
   .superRefine((v, ctx) => {
     if ((v.payment_mode === 'cheque' || v.payment_mode === 'upi') && !v.payment_ref) {
@@ -48,6 +52,11 @@ export async function collectionRoutes(app: FastifyInstance) {
    */
   app.post('/', async (req, reply) => {
     const body = collectionBody.parse(req.body);
+    const today = todayIso(now());
+    const entryDate = body.collected_on ?? today;
+    if (entryDate > today || entryDate < addDays(today, -7)) {
+      throw new HttpError(400, 'Collection date must be within the last 7 days', 'bad_date');
+    }
     const result = await withTenant(app.deps.db, req.user.tid, async (tx) => {
       const c = await tx.query<{ name: string; phone: string; language: 'en' | 'hi' }>(
         'SELECT name, phone, language FROM customers WHERE id = $1',
@@ -57,20 +66,35 @@ export async function collectionRoutes(app: FastifyInstance) {
       const tenant = await tx.query<{ name: string }>('SELECT name FROM tenants');
       const res = await tx.query(
         `INSERT INTO ledger_entries
-           (tenant_id, customer_id, kind, amount_paise, entry_date, payment_mode, payment_ref, note, collected_by, created_by)
-         VALUES ($1, $2, 'payment', $3, $4, $5, $6, $7, $8, $8) RETURNING ${ENTRY_COLUMNS}`,
-        [req.user.tid, body.customer_id, body.amount, todayIso(now()), body.payment_mode, body.payment_ref ?? null, body.note ?? null, req.user.sub],
+           (tenant_id, customer_id, kind, amount_paise, entry_date, payment_mode, payment_ref, note, collected_by, created_by, client_ref)
+         VALUES ($1, $2, 'payment', $3, $4, $5, $6, $7, $8, $8, $9)
+         ON CONFLICT (tenant_id, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
+         RETURNING ${ENTRY_COLUMNS}`,
+        [req.user.tid, body.customer_id, body.amount, entryDate, body.payment_mode, body.payment_ref ?? null, body.note ?? null, req.user.sub, body.client_ref ?? null],
       );
+      if (!res.rows[0]) {
+        // Already recorded by an earlier attempt: return it instead of a duplicate.
+        const prev = await tx.query(`SELECT ${ENTRY_COLUMNS} FROM ledger_entries WHERE client_ref = $1`, [body.client_ref]);
+        const existing = prev.rows[0];
+        if (!existing || existing.customer_id !== body.customer_id || existing.amount_paise !== body.amount) {
+          throw new HttpError(409, 'This collection reference was already used for a different payment', 'client_ref_conflict');
+        }
+        return { entry: existing, customer: c.rows[0], businessName: tenant.rows[0]!.name, duplicate: true };
+      }
       const entry = res.rows[0];
       await audit(tx, req.user.tid, `user:${req.user.sub}`, 'collection.recorded', entry.id, {
         customer_id: body.customer_id,
         amount_paise: body.amount,
         mode: body.payment_mode,
       });
-      return { entry, customer: c.rows[0], businessName: tenant.rows[0]!.name };
+      return { entry, customer: c.rows[0], businessName: tenant.rows[0]!.name, duplicate: false };
     });
 
     const receiptNo = String(result.entry.id).slice(0, 8).toUpperCase();
+    if (result.duplicate) {
+      // The receipt went out with the first successful attempt.
+      return reply.status(200).send({ entry: result.entry, receipt: { number: receiptNo, sent: true, error: null }, duplicate: true });
+    }
     const sent = await app.deps.sender.sendReceipt({
       to: result.customer.phone,
       customerName: result.customer.name,
@@ -82,7 +106,7 @@ export async function collectionRoutes(app: FastifyInstance) {
       language: result.customer.language,
     });
     if (!sent.ok) req.log.warn({ err: sent.error, entry: result.entry.id }, 'receipt message failed');
-    return reply.status(201).send({ entry: result.entry, receipt: { number: receiptNo, sent: sent.ok, error: sent.error ?? null } });
+    return reply.status(201).send({ entry: result.entry, receipt: { number: receiptNo, sent: sent.ok, error: sent.error ?? null }, duplicate: false });
   });
 
   /** Cash and cheques collected but not yet handed over to the office. */

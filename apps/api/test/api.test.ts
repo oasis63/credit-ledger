@@ -276,6 +276,27 @@ run('API (integration, real Postgres)', () => {
     expect(list.body.customers.find((c: { name: string }) => c.name === 'Gupta Medical Store').tally_balance_paise).toBe(5_000_000);
   });
 
+  it('makes offline collections idempotent and keeps the collection date', async () => {
+    const ref = '6f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f';
+    const before = sender.sent.length;
+    const body = { customer_id: customerId, amount: '1200', payment_mode: 'cash', client_ref: ref, collected_on: '2026-11-23' };
+    const first = await call('POST', '/api/collections', salesmanToken, body);
+    expect(first.status).toBe(201);
+    expect(first.body.entry.entry_date).toBe('2026-11-23');
+    // Retry after a dropped connection: same entry back, no second receipt, no double payment.
+    const retry = await call('POST', '/api/collections', salesmanToken, body);
+    expect(retry.status).toBe(200);
+    expect(retry.body.duplicate).toBe(true);
+    expect(retry.body.entry.id).toBe(first.body.entry.id);
+    expect(sender.sent.length).toBe(before + 1);
+    const misuse = await call('POST', '/api/collections', salesmanToken, { ...body, amount: '999' });
+    expect(misuse.status).toBe(409);
+    const tooOld = await call('POST', '/api/collections', salesmanToken, { ...body, client_ref: undefined, collected_on: '2026-11-01' });
+    expect(tooOld.status).toBe(400);
+    const future = await call('POST', '/api/collections', salesmanToken, { ...body, client_ref: undefined, collected_on: '2026-11-30' });
+    expect(future.status).toBe(400);
+  });
+
   it('reports health', async () => {
     expect((await call('GET', '/healthz')).body).toEqual({ ok: true });
   });

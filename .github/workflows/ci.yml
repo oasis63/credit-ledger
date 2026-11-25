@@ -31,6 +31,22 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ledger_test
       - run: npm run build
 
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx expo export --platform android
+        env:
+          EXPO_PUBLIC_API_URL: https://ledger.example.in
+
   agent:
     runs-on: ubuntu-latest
     defaults:

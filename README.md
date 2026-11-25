@@ -5,6 +5,7 @@ Credit and collections software for distributors and wholesalers who sell to ret
 - **Immutable ledger** per retailer: invoices, payments, credit notes, adjustments, bounced cheques. Corrections are new entries; history can't be edited or deleted (enforced by a database trigger).
 - **Aging and risk flags.** FIFO allocation of payments to the oldest bills, 0/30/60/90+ aging, and a transparent green/amber/red risk score with plain-language reasons ("Balance is above the credit limit").
 - **Two-sided ledger.** Each retailer gets a signed WhatsApp link to their live statement, with a **Pay with UPI** button and a **Report a problem** button on every line. Disputes land in a queue for the office.
+- **Android app** for the field team, with **offline collections** that sync automatically and can never be recorded twice.
 - **Salesman collections with instant receipts.** When a salesman records cash, cheque or UPI, the retailer immediately gets a WhatsApp receipt with the amount and the salesman's name. The office closes each salesman's day and the system records any shortfall.
 - **WhatsApp reminders** (single or bulk, with a 72-hour cooldown) through the official WhatsApp Cloud API.
 - **Payment promises from replies.** A reply like "kal 10000 rs bhej dunga" becomes a promise dated tomorrow for ₹10,000, later marked kept or broken. Works in English and romanised Hindi.
@@ -21,13 +22,21 @@ Credit and collections software for distributors and wholesalers who sell to ret
 
 ![Customer ledger](docs/screenshots/customer.png)
 
+### Android app (salesmen and owners)
+
+![Mobile app: customers, customer, offline collection, sync](docs/screenshots/mobile.png)
+
 ## Architecture
 
 ```
-apps/api     Fastify + TypeScript + Postgres (RLS). REST API, WhatsApp webhook, agent endpoint.
-apps/web     React + Vite. Owner/staff app, salesman screens, public retailer statement page.
-agent        Go. Runs on the office PC next to Tally; outbound-only HTTPS to the API.
+apps/api         Fastify + TypeScript + Postgres (RLS). REST API, WhatsApp webhook, agent endpoint.
+apps/web         React + Vite. Office dashboard, customers, disputes, settings, retailer statement page.
+apps/mobile      React Native + Expo (SDK 58). Android app for the field: customers, offline collections, sync.
+packages/shared  Types, money formatting, typed API client and the offline outbox, used by web and mobile.
+agent            Go. Runs on the office PC next to Tally; outbound-only HTTPS to the API.
 ```
+
+See [apps/mobile/README.md](apps/mobile/README.md) for running the Android app and publishing it on Google Play.
 
 Money is stored as integer **paise** everywhere. Dates are `YYYY-MM-DD` in India time.
 
@@ -65,7 +74,7 @@ cd agent && go test ./...
 
 The integration suite drops and recreates the `public` schema of the test database. **Never point `TEST_DATABASE_URL` at real data.**
 
-45 API tests plus Go agent tests. What they cover: money parsing and formatting, FIFO aging, risk rules, UPI links, signed statement tokens (tampering and expiry), the Hindi/English promise parser, password hashing, webhook signatures, and an end-to-end API run covering registration, roles, RLS isolation between tenants, ledger immutability, collections with receipts and day close, the public statement and disputes, reminders with cooldown, the signed webhook, the dashboard, and Tally sync.
+46 API tests, 11 shared-package tests (including the offline outbox) and Go agent tests. What they cover: money parsing and formatting, FIFO aging, risk rules, UPI links, signed statement tokens (tampering and expiry), the Hindi/English promise parser, password hashing, webhook signatures, and an end-to-end API run covering registration, roles, RLS isolation between tenants, ledger immutability, collections with receipts and day close, the public statement and disputes, reminders with cooldown, the signed webhook, the dashboard, and Tally sync.
 
 ## WhatsApp setup (Meta Cloud API)
 
