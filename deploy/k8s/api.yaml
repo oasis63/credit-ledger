@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  selector:
+    app.kubernetes.io/name: api
+  ports:
+    - name: http
+      port: 4000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+spec:
+  # Two replicas: rolling updates without downtime. Migrations are safe with
+  # several replicas because the API takes a Postgres advisory lock first.
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: credit-ledger-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4000
+          envFrom:
+            - configMapRef:
+                name: credit-ledger-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: credit-ledger-secrets
+                  key: POSTGRES_PASSWORD
+            # $(POSTGRES_PASSWORD) is expanded by Kubernetes from the variable above.
+            - name: DATABASE_URL
+              value: postgres://ledger:$(POSTGRES_PASSWORD)@postgres:5432/ledger
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: credit-ledger-secrets
+                  key: JWT_SECRET
+            - name: STATEMENT_LINK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: credit-ledger-secrets
+                  key: STATEMENT_LINK_SECRET
+            - name: WHATSAPP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: credit-ledger-secrets
+                  key: WHATSAPP_TOKEN
+                  optional: true
+            - name: WHATSAPP_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: credit-ledger-secrets
+                  key: WHATSAPP_APP_SECRET
+                  optional: true
+            - name: WHATSAPP_VERIFY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: credit-ledger-secrets
+                  key: WHATSAPP_VERIFY_TOKEN
+                  optional: true
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 3
+            failureThreshold: 40
+          # Ready only when the database answers: traffic stops if Postgres is down...
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          # ...but the process is only restarted if it stops accepting connections.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api

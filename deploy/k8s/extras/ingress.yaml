@@ -1,0 +1,27 @@
+# Optional: expose the app on a real domain with HTTPS.
+# Requires an ingress controller (e.g. ingress-nginx) and cert-manager.
+#   kubectl -n credit-ledger apply -f deploy/k8s/extras/ingress.yaml
+# Then set PUBLIC_WEB_URL and CORS_ORIGINS in configmap.yaml to https://ledger.your-domain.in
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: credit-ledger
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [ledger.your-domain.in]
+      secretName: credit-ledger-tls
+  rules:
+    - host: ledger.your-domain.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

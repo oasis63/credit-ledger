@@ -28,7 +28,8 @@ npm install
 npx expo start
 ```
 
-- **Phone on the same Wi-Fi:** sign in with server address `http://<your-laptop-ip>:4000` (the API must allow it; for plain `http` on Android use a development build, see below).
+- **Backend:** start it with `make dev` in the repo root (Docker; no Postgres install needed). Find your Mac's IP with `ipconfig getifaddr en0`.
+- **Phone on the same Wi-Fi:** sign in with server address `http://<your-laptop-ip>:4000`. Against `make prod` or `make k8s-up`, use `http://<your-laptop-ip>:8080` instead (the web server forwards `/api`) (the API must allow it; for plain `http` on Android use a development build, see below).
 - **Android emulator:** the default server `http://10.0.2.2:4000` points at your computer's API.
 - **Expo Go vs development build:** if the Play Store version of Expo Go doesn't support SDK 58 yet, use a development build instead: `npx eas-cli@latest build --profile development --platform android`, install the APK, then `npx expo start`.
 

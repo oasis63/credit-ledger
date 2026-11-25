@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: credit-ledger-config
+data:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  # The public address people use. Locally that's the port-forward; in production your domain.
+  PUBLIC_WEB_URL: http://localhost:8080
+  CORS_ORIGINS: http://localhost:8080
+  STATEMENT_LINK_TTL_DAYS: "30"
+  # "console" logs messages instead of sending them. Set to "cloud" with real WhatsApp credentials.
+  WHATSAPP_MODE: console
+  WHATSAPP_PHONE_NUMBER_ID: ""
+  WHATSAPP_REMINDER_TEMPLATE: payment_reminder
+  WHATSAPP_RECEIPT_TEMPLATE: payment_receipt

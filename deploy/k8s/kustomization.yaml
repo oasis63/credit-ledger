@@ -1,0 +1,24 @@
+# Deploy with:  make k8s-up   (or: kubectl apply -k deploy/k8s)
+# The namespace and the Secret are created by `make k8s-secrets`, so that
+# `make k8s-down` never deletes your database or your secrets.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: credit-ledger
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: credit-ledger
+    includeSelectors: false
+resources:
+  - configmap.yaml
+  - postgres.yaml
+  - api.yaml
+  - web.yaml
+  - network-policies.yaml
+# For a real cluster, push images to a registry and override them here, e.g.:
+# images:
+#   - name: credit-ledger-api
+#     newName: ghcr.io/you/credit-ledger-api
+#     newTag: "1.0.0"
+#   - name: credit-ledger-web
+#     newName: ghcr.io/you/credit-ledger-web
+#     newTag: "1.0.0"

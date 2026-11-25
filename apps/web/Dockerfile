@@ -10,7 +10,8 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 RUN npm run build -w apps/web
 
-FROM nginx:1.27-alpine
+# Unprivileged nginx: runs as a non-root user and listens on 8080.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/apps/web/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080

@@ -1,0 +1,127 @@
+# Development stack: everything runs in containers, nothing to install on your Mac
+# except Docker. Source code is mounted, so edits reload automatically.
+#
+#   make dev        (or: docker compose -f compose.dev.yml up)
+#
+#   Web app    http://localhost:5173
+#   API        http://localhost:4000   (also reachable from your phone on the same Wi-Fi)
+#   Postgres   localhost:5432  user/password/db: ledger / ledger / ledger  (for pgAdmin etc.)
+#
+# Secrets below are for local development only. Never reuse them anywhere else.
+name: credit-ledger-dev
+
+x-node: &node
+  image: node:22-alpine
+  working_dir: /app
+  volumes:
+    - .:/app
+    # Linux node_modules live in named volumes so they never clash with your Mac's.
+    - node_modules:/app/node_modules
+    - api_node_modules:/app/apps/api/node_modules
+    - web_node_modules:/app/apps/web/node_modules
+    - shared_node_modules:/app/packages/shared/node_modules
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ledger
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dev_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Installs dependencies once (and again whenever package-lock.json changes).
+  deps:
+    <<: *node
+    command: >
+      sh -c "if [ ! -f node_modules/.installed ] || [ package-lock.json -nt node_modules/.installed ]; then
+               npm ci --no-audit --no-fund && touch node_modules/.installed;
+             else echo 'dependencies up to date'; fi"
+
+  api:
+    <<: *node
+    command: npm run dev:api
+    environment:
+      DATABASE_URL: postgres://ledger:ledger@db:5432/ledger
+      JWT_SECRET: dev-only-jwt-secret-change-me-0123456789abcdef
+      STATEMENT_LINK_SECRET: dev-only-link-secret-change-me-0123456789abcdef
+      PUBLIC_WEB_URL: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8081
+      WHATSAPP_MODE: console
+      HOST: 0.0.0.0
+      PORT: "4000"
+      LOG_LEVEL: info
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
+
+  web:
+    <<: *node
+    command: npm run dev:web
+    environment:
+      VITE_HOST: 0.0.0.0
+      VITE_API_PROXY_TARGET: http://api:4000
+      VITE_POLL: "1"
+    ports:
+      - "5173:5173"
+    depends_on:
+      deps:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+
+  # ---- Tests: make test  (uses a throwaway database in memory, never your dev data) ----
+  db-test:
+    profiles: [test]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ledger_test
+      POSTGRES_USER: ledger
+      POSTGRES_PASSWORD: ledger
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ledger -d ledger_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  test:
+    <<: *node
+    profiles: [test]
+    command: sh -c "npm run typecheck && npm test"
+    environment:
+      TEST_DATABASE_URL: postgres://ledger:ledger@db-test:5432/ledger_test
+    depends_on:
+      db-test:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
+
+  # Go tests for the Tally agent, also in a container.
+  agent-test:
+    profiles: [test]
+    image: golang:1.24-alpine
+    working_dir: /src
+    volumes:
+      - ./agent:/src
+    command: sh -c "go vet ./... && go test ./... && GOOS=windows GOARCH=amd64 go build -o /tmp/cl-agent.exe ./cmd/agent && echo 'windows build ok'"
+
+volumes:
+  dev_db:
+  node_modules:
+  api_node_modules:
+  web_node_modules:
+  shared_node_modules:
