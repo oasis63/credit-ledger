@@ -15,8 +15,8 @@ API_IMAGE ?= credit-ledger-api:local
 WEB_IMAGE ?= credit-ledger-web:local
 KIND_CLUSTER ?= kind
 
-.PHONY: help dev dev-detached logs down reset-db psql test prod prod-down env images \
-        k8s-secrets k8s-up k8s-status k8s-open k8s-logs k8s-load k8s-down k8s-delete-data
+.PHONY: help dev dev-detached logs down reset-db psql seed test prod prod-down prod-seed env images \
+        k8s-secrets k8s-up k8s-status k8s-open k8s-logs k8s-seed k8s-load k8s-down k8s-delete-data
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -41,6 +41,9 @@ reset-db: ## Stop the dev stack AND delete the dev database
 psql: ## Open a psql shell inside the dev database container
 	$(DEV) exec db psql -U ledger -d ledger
 
+seed: ## Load demo data (24 shops, bills, beats) into the dev database. Sign in: demo@creditledger.in / demo-password-123
+	$(DEV) exec api npm run seed -w apps/api
+
 test: ## Run typecheck + all tests (shared, API with real Postgres, Go agent) in containers
 	$(DEV) --profile test run --rm test
 	$(DEV) --profile test run --rm agent-test
@@ -58,6 +61,9 @@ prod: env ## Build and run the production images (http://localhost:8080)
 
 prod-down: ## Stop the production-like stack
 	docker compose down
+
+prod-seed: ## Load demo data into the production-like stack
+	docker compose exec api node dist/seed.js
 
 images: ## Build the API and web images for Kubernetes
 	docker build -f apps/api/Dockerfile -t $(API_IMAGE) .
@@ -92,6 +98,9 @@ k8s-status: ## Show pods, services and recent events
 
 k8s-open: ## Forward http://localhost:8080 to the web service (Ctrl+C to stop)
 	kubectl -n $(NS) port-forward svc/web 8080:80
+
+k8s-seed: ## Load demo data into the Kubernetes database
+	kubectl -n $(NS) exec deploy/api -- node dist/seed.js
 
 k8s-logs: ## Follow API logs
 	kubectl -n $(NS) logs -f deployment/api

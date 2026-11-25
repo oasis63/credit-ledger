@@ -11,20 +11,28 @@ Credit and collections software for distributors and wholesalers who sell to ret
 - **Payment promises from replies.** A reply like "kal 10000 rs bhej dunga" becomes a promise dated tomorrow for ₹10,000, later marked kept or broken. Works in English and romanised Hindi.
 - **UPI to the distributor's own UPI ID.** No payment gateway, no fees, and this system never holds money.
 - **Tally sync agent** (Go, read-only) that mirrors Sundry Debtors balances from TallyPrime so the app and the books can be reconciled.
-- **Roles:** owner, accountant, salesman. Salesmen can only record collections and see their own.
+- **GST bills** with items, HSN, discounts and 0–28% GST. CGST/SGST or IGST is chosen automatically from the GSTINs, totals round to the rupee, and every bill carries a **UPI QR** for its amount. Bills post to the ledger, print as A4 or PDF, and are cancelled with a credit note, never edited.
+- **Customer management:** owner/contact person, area, address, tags, map location, archive. **Bulk import** from Excel or CSV with column matching, a dry-run check and opening balances.
+- **Salesman tools:** **beats** (fixed routes on chosen weekdays, in visiting order), **today's route** on the phone, **check-ins** with outcome and GPS (the first check-in pins the shop on the map), **daily targets** and a **map** of every shop coloured by risk.
+- **Reports:** collections vs billing by day, payment modes, salesman performance against target, **GST summary** (by rate and HSN, B2B/B2C), ageing. Every report exports to **Excel**.
+- **Roles:** owner, accountant, salesman. Salesmen can only record collections and visits, and see their own.
 - **Multi-tenant** with Postgres **row-level security**: tenant isolation is enforced by the database, not just application code.
 
 ## Screens
 
-| Owner dashboard | Retailer statement (from WhatsApp link) |
-|---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Retailer statement](docs/screenshots/retailer-statement-mobile.png) |
+![Owner dashboard](docs/screenshots/dashboard.png)
 
-![Customer ledger](docs/screenshots/customer.png)
+| Customer | GST bill with UPI QR |
+|---|---|
+| ![Customer ledger](docs/screenshots/customer.png) | ![GST bill](docs/screenshots/bill.png) |
+
+| Today's route (office view) | Salesman performance |
+|---|---|
+| ![Field](docs/screenshots/field.png) | ![Reports](docs/screenshots/reports.png) |
 
 ### Android app (salesmen and owners)
 
-![Mobile app: customers, customer, offline collection, sync](docs/screenshots/mobile.png)
+![Mobile app: today's route, check-in, customer with UPI QR, GST bill](docs/screenshots/mobile.png)
 
 ## Architecture
 
@@ -50,11 +58,12 @@ You need **Docker Desktop** or **OrbStack** on your Mac. Postgres, Node and Go a
 make dev          # Postgres + API (:4000) + web (:5173) with hot reload
 ```
 
-Open http://localhost:5173. The first run installs packages into Docker volumes, which takes a minute. Edit files in your editor and the API and web app reload. Other commands:
+Open http://localhost:5173. The first run installs packages into Docker volumes, which takes a minute. To try everything with sample data, run `make seed` in a second terminal and sign in as **demo@creditledger.in** / **demo-password-123** (salesman: amit@creditledger.in, same password). Edit files in your editor and the API and web app reload. Other commands:
 
 | Command | What it does |
 |---|---|
 | `make dev-detached` / `make logs` / `make down` | Run in the background, follow logs, stop |
+| `make seed` | Load demo data: 24 shops, 3 beats, 2 salesmen, two months of bills and payments |
 | `make psql` | Open `psql` inside the Postgres container |
 | `make reset-db` | Stop and wipe the development database |
 | `make test` | Typecheck + all tests against a throwaway Postgres, plus the Go agent tests |

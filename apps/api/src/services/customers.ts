@@ -14,11 +14,21 @@ export interface CustomerRow {
   tally_ledger_name: string | null;
   tally_balance_paise: number | null;
   tally_synced_at: string | null;
+  contact_name: string | null;
+  address: string | null;
+  area: string | null;
+  tags: string[];
+  lat: number | null;
+  lng: number | null;
+  beat_id: string | null;
+  beat_order: number;
+  archived_at: string | null;
   created_at: string;
 }
 
 export const CUSTOMER_COLUMNS =
-  'id, name, phone, gstin, credit_limit_paise, credit_days, language, tally_ledger_name, tally_balance_paise, tally_synced_at, created_at';
+  'id, name, phone, gstin, credit_limit_paise, credit_days, language, tally_ledger_name, tally_balance_paise, tally_synced_at, ' +
+  'contact_name, address, area, tags, lat, lng, beat_id, beat_order, archived_at, created_at';
 
 export const ENTRY_COLUMNS =
   'id, customer_id, kind, amount_paise, entry_date, due_date, reference, note, payment_mode, payment_ref, collected_by, handed_over_at, created_by, created_at, client_ref';
@@ -42,8 +52,12 @@ async function countsByCustomer(tx: Tx, sql: string): Promise<Map<string, number
 }
 
 /** Balance, aging and risk for every customer of the current tenant. */
-export async function customerSummaries(tx: Tx, asOf: string = todayIso()) {
-  const customers = (await tx.query<CustomerRow>(`SELECT ${CUSTOMER_COLUMNS} FROM customers ORDER BY name`)).rows;
+export async function customerSummaries(tx: Tx, asOf: string = todayIso(), opts: { includeArchived?: boolean } = {}) {
+  const customers = (
+    await tx.query<CustomerRow>(
+      `SELECT ${CUSTOMER_COLUMNS} FROM customers ${opts.includeArchived ? '' : 'WHERE archived_at IS NULL'} ORDER BY name`,
+    )
+  ).rows;
   const entries = await entriesByCustomer(tx);
   const disputes = await countsByCustomer(
     tx,

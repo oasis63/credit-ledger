@@ -1,4 +1,4 @@
-import type { CollectionResult, CustomerDetail, CustomerSummary, NewCollection, User } from './types';
+import type { BillDetail, CollectionResult, CustomerDetail, CustomerSummary, FieldToday, NewCollection, NewVisit, User, VisitOutcome } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -99,5 +99,24 @@ export class ApiClient {
     return this.request<{ pending: Array<{ salesman_id: string; salesman_name: string; entry_count: number; cash_paise: number; cheque_paise: number }> }>(
       '/api/collections/pending',
     );
+  }
+
+  fieldToday(date?: string) {
+    return this.request<FieldToday>(`/api/field/today${date ? `?date=${date}` : ''}`);
+  }
+
+  recordVisit(v: NewVisit) {
+    return this.request<{ visit: { id: string; outcome: VisitOutcome }; duplicate: boolean }>('/api/visits', { method: 'POST', body: v });
+  }
+
+  upiQr(customerId: string, amountRupees?: string) {
+    const q = amountRupees ? `?amount=${encodeURIComponent(amountRupees)}` : '';
+    return this.request<{ link: string; amount_paise: number; vpa: string; payee: string; svg: string }>(
+      `/api/customers/${encodeURIComponent(customerId)}/upi-qr${q}`,
+    );
+  }
+
+  bill(id: string) {
+    return this.request<BillDetail>(`/api/bills/${encodeURIComponent(id)}`);
   }
 }

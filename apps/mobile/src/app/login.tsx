@@ -35,8 +35,11 @@ export default function Login() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ padding: space.xl, flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
-          <Text style={{ fontSize: 28, fontWeight: '800', color: colors.brand, marginBottom: 4 }}>Credit Ledger</Text>
-          <Text style={{ fontSize: 16, color: colors.muted, marginBottom: space.xl }}>Collections and credit for your field team</Text>
+          <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginBottom: space.lg }}>
+            <Text style={{ color: '#fff', fontSize: 32, fontWeight: '800' }}>₹</Text>
+          </View>
+          <Text style={{ fontSize: 30, fontWeight: '800', color: colors.ink, marginBottom: 4 }}>Credit Ledger</Text>
+          <Text style={{ fontSize: 16, color: colors.muted, marginBottom: space.xl }}>Your route, visits and collections. Works without internet.</Text>
           {error && <Banner tone="bad">{error}</Banner>}
           <Field
             label="Email"
@@ -64,7 +67,7 @@ export default function Login() {
             </Text>
           )}
           <View style={{ marginTop: space.sm }}>
-            <Button title="Sign in" onPress={submit} busy={busy} />
+            <Button title="Sign in" icon="log-in-outline" onPress={submit} busy={busy} />
           </View>
           <Text style={{ color: colors.muted, marginTop: space.lg, fontSize: 13 }}>
             Your office creates your account. Ask the owner if you don't have one.

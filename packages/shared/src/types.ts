@@ -48,6 +48,15 @@ export interface CustomerSummary {
   open_disputes: number;
   tally_balance_paise: number | null;
   tally_synced_at: string | null;
+  contact_name: string | null;
+  address: string | null;
+  area: string | null;
+  tags: string[];
+  lat: number | null;
+  lng: number | null;
+  beat_id: string | null;
+  beat_order: number;
+  archived_at: string | null;
 }
 
 export interface StatementLine {
@@ -93,6 +102,90 @@ export interface CustomerDetail {
   disputes: Dispute[];
   promises: Promise_[];
   reminders: Array<{ id: string; created_at: string; amount_paise: number; status: string; error: string | null }>;
+  bills: Array<{ id: string; bill_no: string; bill_date: string; due_date: string; total_paise: number; cancelled_at: string | null }>;
+  visits: Array<{ id: string; visited_on: string; outcome: VisitOutcome; note: string | null; salesman_name: string; created_at: string }>;
+  beat: { id: string; name: string } | null;
+}
+
+export type VisitOutcome = 'collected' | 'promised' | 'no_payment' | 'shop_closed' | 'owner_absent' | 'order_taken';
+
+export const OUTCOME_LABEL: Record<VisitOutcome, string> = {
+  collected: 'Collected payment',
+  promised: 'Promised to pay',
+  no_payment: 'No payment',
+  shop_closed: 'Shop closed',
+  owner_absent: 'Owner not there',
+  order_taken: 'Took an order',
+};
+
+export interface NewVisit {
+  customer_id: string;
+  outcome: VisitOutcome;
+  note?: string;
+  lat?: number;
+  lng?: number;
+  accuracy_m?: number;
+  client_ref: string;
+  visited_on: string;
+  pin_shop?: boolean;
+}
+
+export interface RouteStop {
+  id: string;
+  name: string;
+  phone: string;
+  contact_name: string | null;
+  area: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  beat_id: string | null;
+  beat_name: string | null;
+  balance_paise: number;
+  overdue_paise: number;
+  risk: RiskFlag;
+  visit: { outcome: VisitOutcome; note: string | null; created_at: string } | null;
+}
+
+export interface FieldToday {
+  date: string;
+  weekday: number;
+  salesman: { id: string; name: string };
+  target_paise: number;
+  collected_paise: number;
+  collections: number;
+  beats: Array<{ id: string; name: string }>;
+  all_beats: Array<{ id: string; name: string; weekdays: number[] }>;
+  stops: RouteStop[];
+  visited: number;
+  to_collect_paise: number;
+  overdue_elsewhere: Array<{ id: string; name: string; area: string | null; overdue_paise: number; beat_name: string | null }>;
+}
+
+export interface BillItem {
+  description: string;
+  hsn: string | null;
+  qty: number;
+  unit: string;
+  rate_paise: number;
+  discount_pct: number;
+  gst_rate: number;
+  taxable_paise: number;
+  tax_paise: number;
+  amount_paise: number;
+}
+
+export interface BillDetail {
+  bill: {
+    id: string; customer_id: string; bill_no: string; bill_date: string; due_date: string; interstate: boolean;
+    subtotal_paise: number; discount_paise: number; taxable_paise: number; cgst_paise: number; sgst_paise: number; igst_paise: number;
+    round_off_paise: number; total_paise: number; notes: string | null; cancelled_at: string | null; cancel_reason: string | null;
+    customer_name: string; customer_phone: string; customer_gstin: string | null; customer_address: string | null; amount_in_words: string;
+  };
+  items: BillItem[];
+  tax_summary: Array<{ gst_rate: number; taxable_paise: number; tax_paise: number }>;
+  seller: { name: string; gstin: string | null; address: string | null; phone: string | null; state_code: string | null };
+  upi: { link: string; qr_svg: string } | null;
 }
 
 export interface NewCollection {

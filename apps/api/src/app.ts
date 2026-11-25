@@ -18,6 +18,8 @@ import { publicRoutes } from './routes/public.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { settingsRoutes } from './routes/settings.js';
 import { agentRoutes } from './routes/agent.js';
+import { billRoutes } from './routes/bills.js';
+import { fieldRoutes } from './routes/field.js';
 
 export type Role = 'owner' | 'accountant' | 'salesman';
 
@@ -143,6 +145,8 @@ export async function buildApp(deps: AppDeps) {
   await app.register(reportRoutes, { prefix: '/api/reports' });
   await app.register(settingsRoutes, { prefix: '/api/settings' });
   await app.register(agentRoutes, { prefix: '/api/agent' });
+  await app.register(billRoutes, { prefix: '/api/bills' });
+  await app.register(fieldRoutes, { prefix: '/api' });
   await app.register(publicRoutes, { prefix: '/api/public' });
   await app.register(webhookRoutes, { prefix: '/webhooks' });
 

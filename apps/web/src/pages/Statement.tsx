@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, type Aging, type StatementLine } from '../api';
 import { AsyncForm, ErrorNote } from '../components';
+import { AgingBar } from '../ui';
 import { date, KIND_LABEL, REASON_LABEL, rupees } from '../format';
 import { useApi } from '../hooks';
 
@@ -15,6 +16,7 @@ interface PublicStatement {
   lines: StatementLine[];
   disputes: Array<{ id: string; entry_id: string | null; reason: string; status: string; resolution_note: string | null; created_at: string }>;
   upi_link: string | null;
+  upi_qr_svg: string | null;
   pay_amount_paise: number;
 }
 
@@ -32,32 +34,36 @@ export function Statement() {
 
   return (
     <div className="public">
-      <h1>{data.business_name}</h1>
-      <p>
-        Statement for <b>{data.customer_name}</b> as of {date(data.as_of)}
+      <div className="public-brand"><div className="brand-mark">₹</div><span>{data.business_name}</span></div>
+      <h1>Your account statement</h1>
+      <p className="muted">
+        For <b>{data.customer_name}</b> as of {date(data.as_of)}
       </p>
-      <div className="stats">
-        <div className="stat">
-          <div className="stat-label">You owe</div>
-          <div className="stat-value">{rupees(data.balance_paise)}</div>
-        </div>
-        <div className="stat bad">
-          <div className="stat-label">Overdue now</div>
-          <div className="stat-value">{rupees(data.overdue_paise)}</div>
-        </div>
+      <div className="kpi-grid kpi-grid-2">
+        <div className="kpi kpi-brand"><div className="kpi-label">You owe</div><div className="kpi-value">{rupees(data.balance_paise)}</div></div>
+        <div className="kpi kpi-bad"><div className="kpi-label">Overdue now</div><div className="kpi-value">{rupees(data.overdue_paise)}</div></div>
       </div>
 
       {data.upi_link && (
-        <a className="paybutton" href={data.upi_link}>
-          Pay {rupees(data.pay_amount_paise)} with any UPI app
-        </a>
+        <div className="pay-card">
+          <a className="paybutton" href={data.upi_link}>
+            Pay {rupees(data.pay_amount_paise)} with any UPI app
+          </a>
+          {data.upi_qr_svg && (
+            <div className="pay-qr">
+              <div className="qr" dangerouslySetInnerHTML={{ __html: data.upi_qr_svg }} />
+              <span className="muted small">On a computer? Scan this with your phone.</span>
+            </div>
+          )}
+        </div>
       )}
+      <div className="card"><AgingBar aging={data.aging} /></div>
 
       {thanks && <p className="note">Thank you. Your supplier will review this and reply.</p>}
 
       <h2>Bills and payments</h2>
       <p className="muted small">Something wrong? Tap “Report a problem” on that line.</p>
-      <table>
+      <div className="card card-flush"><div className="table-wrap"><table className="table">
         <thead>
           <tr>
             <th>Date</th>
@@ -89,7 +95,7 @@ export function Statement() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div></div>
 
       {disputeFor && (
         <section className="card">

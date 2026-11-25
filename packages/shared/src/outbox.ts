@@ -1,5 +1,5 @@
 import { ApiError, type ApiClient } from './client';
-import type { NewCollection } from './types';
+import type { NewCollection, NewVisit } from './types';
 
 /**
  * Offline outbox for field collections. Each collection is saved on the
@@ -8,9 +8,10 @@ import type { NewCollection } from './types';
  */
 export type OutboxStatus = 'pending' | 'synced' | 'failed';
 
-export interface OutboxItem {
+export type OutboxItem = CollectionItem | VisitItem;
+
+interface ItemBase {
   client_ref: string;
-  payload: NewCollection;
   customer_name: string;
   created_at: string; // ISO timestamp on the device
   status: OutboxStatus;
@@ -19,6 +20,18 @@ export interface OutboxItem {
   receipt_no: string | null;
   synced_at: string | null;
 }
+
+/** Items saved before visits existed have no `kind`; they are collections. */
+export interface CollectionItem extends ItemBase {
+  kind?: 'collection';
+  payload: NewCollection;
+}
+
+export interface VisitItem extends ItemBase {
+  kind: 'visit';
+  payload: NewVisit;
+}
+
 
 /** Storage is injected so the same logic runs on SQLite (phone) and in memory (tests). */
 export interface OutboxStore {
@@ -55,8 +68,27 @@ export class Outbox {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
+  /** Queue a shop visit (check-in). Synced in order with collections. */
+  async addVisit(payload: NewVisit, customerName: string): Promise<OutboxItem> {
+    const item: VisitItem = {
+      kind: 'visit',
+      client_ref: payload.client_ref,
+      payload,
+      customer_name: customerName,
+      created_at: this.now().toISOString(),
+      status: 'pending',
+      attempts: 0,
+      last_error: null,
+      receipt_no: null,
+      synced_at: null,
+    };
+    await this.store.put(item);
+    return item;
+  }
+
   async add(payload: NewCollection, customerName: string): Promise<OutboxItem> {
     const item: OutboxItem = {
+      kind: 'collection',
       client_ref: payload.client_ref,
       payload,
       customer_name: customerName,
@@ -82,7 +114,7 @@ export class Outbox {
   /** Retry a failed item (e.g. after the salesman fixes a cheque number on the web). */
   async retry(clientRef: string): Promise<void> {
     const item = (await this.store.all()).find((i) => i.client_ref === clientRef);
-    if (item && item.status === 'failed') await this.store.put({ ...item, status: 'pending', last_error: null });
+    if (item && item.status === 'failed') await this.store.put({ ...item, status: 'pending', last_error: null } as OutboxItem);
   }
 
   async discard(clientRef: string): Promise<void> {
@@ -119,24 +151,26 @@ export class Outbox {
     for (const item of await this.store.all()) {
       if (item.status !== 'pending') continue;
       try {
-        const res = await api.recordCollection(item.payload);
+        let receipt: string | null = null;
+        if (item.kind === 'visit') await api.recordVisit(item.payload);
+        else receipt = (await api.recordCollection(item.payload)).receipt.number;
         await this.store.put({
           ...item,
           status: 'synced',
           attempts: item.attempts + 1,
           last_error: null,
-          receipt_no: res.receipt.number,
+          receipt_no: receipt,
           synced_at: this.now().toISOString(),
-        });
+        } as OutboxItem);
         synced++;
       } catch (err) {
         const e = err instanceof ApiError ? err : new ApiError(0, (err as Error).message, 'unknown');
         if (e.retryable || e.status === 401) {
-          await this.store.put({ ...item, attempts: item.attempts + 1, last_error: e.message });
+          await this.store.put({ ...item, attempts: item.attempts + 1, last_error: e.message } as OutboxItem);
           stoppedEarly = true;
           break;
         }
-        await this.store.put({ ...item, status: 'failed', attempts: item.attempts + 1, last_error: e.message });
+        await this.store.put({ ...item, status: 'failed', attempts: item.attempts + 1, last_error: e.message } as OutboxItem);
         failed++;
       }
     }

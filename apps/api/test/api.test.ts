@@ -297,6 +297,171 @@ run('API (integration, real Postgres)', () => {
     expect(future.status).toBe(400);
   });
 
+  it('stores contact, area, tags; lists facets; guards archiving', async () => {
+    const upd = await call('PATCH', `/api/customers/${customerId}`, ownerToken, {
+      contact_name: 'Ramesh Gupta', area: 'Karol Bagh', tags: ['Pharmacy', 'priority'], address: '12 Main Rd',
+    });
+    expect(upd.status).toBe(200);
+    expect(upd.body.customer).toMatchObject({ contact_name: 'Ramesh Gupta', area: 'Karol Bagh', tags: ['pharmacy', 'priority'] });
+    const created = await call('POST', '/api/customers', ownerToken, { name: 'New Shop', phone: '9811100001', area: 'Lajpat Nagar', contact_name: 'Anil' });
+    expect(created.body.customer).toMatchObject({ area: 'Lajpat Nagar', contact_name: 'Anil' });
+    const facets = await call('GET', '/api/customers/facets', ownerToken);
+    expect(facets.body.areas.map((a: { area: string }) => a.area)).toEqual(['Karol Bagh', 'Lajpat Nagar']);
+    expect((await call('GET', '/api/customers?tag=priority', ownerToken)).body.customers).toHaveLength(1);
+    expect((await call('GET', '/api/customers?search=ramesh', ownerToken)).body.customers[0].id).toBe(customerId);
+    // A customer who still owes money cannot be archived; a settled one can.
+    expect((await call('PATCH', `/api/customers/${customerId}`, ownerToken, { archived: true })).status).toBe(400);
+    const arch = await call('PATCH', `/api/customers/${created.body.customer.id}`, ownerToken, { archived: true });
+    expect(arch.body.customer.archived_at).toBeTruthy();
+    expect((await call('GET', '/api/customers', ownerToken)).body.customers.some((c: { id: string }) => c.id === created.body.customer.id)).toBe(false);
+    expect((await call('GET', '/api/customers?archived=1', ownerToken)).body.customers).toHaveLength(1);
+  });
+
+  it('imports customers from a spreadsheet with validation, dry run and opening balances', async () => {
+    const rows = [
+      { name: 'Verma Kirana', phone: '98111 22233', contact_name: 'Sunil', area: 'Rohini', credit_limit: '50,000', credit_days: '15', opening_balance: '₹12,500.50', tags: 'kirana; new' },
+      { name: 'Bad Phone', phone: '12345' },
+      { name: '', phone: '9811122234' },
+      { name: 'Dup in file', phone: '9811122233' },
+      { name: 'Gupta again', phone: '9876543210', area: 'Updated Area' },
+      { name: 'Wrong GST', phone: '9811122235', gstin: 'ABC' },
+    ];
+    const dry = await call('POST', '/api/customers/import', ownerToken, { rows, dry_run: true });
+    expect(dry.status).toBe(200);
+    expect(dry.body).toMatchObject({ dry_run: true, created: 1, skipped: 1, opening_balances: 1 });
+    expect(dry.body.errors.map((e: { row: number }) => e.row)).toEqual([3, 4, 5, 7]);
+    expect((await call('GET', '/api/customers?search=verma', ownerToken)).body.customers).toHaveLength(0);
+
+    const real = await call('POST', '/api/customers/import', ownerToken, { rows, opening_date: '2026-11-01' });
+    expect(real.body).toMatchObject({ created: 1, skipped: 1, opening_balances: 1 });
+    const verma = (await call('GET', '/api/customers?search=verma', ownerToken)).body.customers[0];
+    expect(verma).toMatchObject({ phone: '919811122233', credit_limit_paise: 5_000_000, credit_days: 15, balance_paise: 1_250_050, tags: ['kirana', 'new'] });
+    // Re-import with update: details change, balance is not doubled.
+    const again = await call('POST', '/api/customers/import', ownerToken, { rows: [rows[0]!], on_duplicate: 'update' });
+    expect(again.body).toMatchObject({ created: 0, updated: 1, opening_balances: 0 });
+    expect((await call('GET', `/api/customers/${verma.id}`, ownerToken)).body.balance_paise).toBe(1_250_050);
+    expect((await call('POST', '/api/customers/import', salesmanToken, { rows })).status).toBe(403);
+  });
+
+  let billId = '';
+  it('creates GST bills with numbering, tax split, ledger posting, QR and cancellation', async () => {
+    const st = await call('PATCH', '/api/settings', ownerToken, {
+      gstin: '07AAACS1234A1Z5', address: 'Chandni Chowk, Delhi', bill_prefix: 'SPD/', next_bill_no: 101, upi_vpa: 'sharma@okhdfc', upi_payee_name: 'Sharma Pharma',
+    });
+    expect(st.status).toBe(200);
+    expect(st.body.tenant.state_code).toBe('07');
+    const before = (await call('GET', `/api/customers/${customerId}`, ownerToken)).body.balance_paise;
+    const items = [
+      { description: 'Paracetamol 500 (strip)', hsn: '3004', qty: 10, unit: 'strip', rate: '25.50', gst_rate: 12 },
+      { description: 'Bandage roll', qty: 2.5, unit: 'box', rate: 100, discount_pct: 10, gst_rate: 5 },
+    ];
+    const preview = await call('POST', '/api/bills/preview', ownerToken, { customer_id: customerId, items });
+    expect(preview.status).toBe(200);
+    // 255.00 @12% -> CGST 15.30 + SGST 15.30; 250 - 10% = 225 @5% -> 5.63 + 5.63
+    expect(preview.body).toMatchObject({ interstate: false, taxable_paise: 48_000, cgst_paise: 2_093, sgst_paise: 2_093, igst_paise: 0 });
+    expect(preview.body.total_paise).toBe(52_200);
+    expect(preview.body.round_off_paise).toBe(14);
+
+    const res = await call('POST', '/api/bills', ownerToken, { customer_id: customerId, items, bill_date: '2026-11-25' });
+    expect(res.status).toBe(201);
+    expect(res.body.bill).toMatchObject({ bill_no: 'SPD/101', total_paise: 52_200 });
+    billId = res.body.bill.id;
+    const second = await call('POST', '/api/bills', ownerToken, { customer_id: customerId, items: [items[0]] });
+    expect(second.body.bill.bill_no).toBe('SPD/102');
+    const after = (await call('GET', `/api/customers/${customerId}`, ownerToken)).body;
+    expect(after.balance_paise).toBe(before + 52_200 + second.body.bill.total_paise);
+    expect(after.bills[0].bill_no).toBe('SPD/102');
+
+    const full = await call('GET', `/api/bills/${billId}`, ownerToken);
+    expect(full.body.bill.amount_in_words).toBe('Five Hundred Twenty Two Rupees Only');
+    expect(full.body.items).toHaveLength(2);
+    expect(full.body.items[1]).toMatchObject({ qty: 2.5, discount_pct: 10, gst_rate: 5, taxable_paise: 22_500 });
+    expect(full.body.upi.link).toContain('am=522.00');
+    expect(full.body.upi.qr_svg).toContain('<svg');
+    expect(full.body.tax_summary).toEqual([
+      { gst_rate: 5, taxable_paise: 22_500, tax_paise: 1_126 },
+      { gst_rate: 12, taxable_paise: 25_500, tax_paise: 3_060 },
+    ]);
+
+    // Inter-state customer (GSTIN from another state) gets IGST.
+    const ka = await call('POST', '/api/customers', ownerToken, { name: 'Bengaluru Pharma', phone: '9811100009', gstin: '29AAACB1234A1Z5' });
+    const igst = await call('POST', '/api/bills/preview', ownerToken, { customer_id: ka.body.customer.id, items: [items[0]] });
+    expect(igst.body).toMatchObject({ interstate: true, igst_paise: 3_060, cgst_paise: 0 });
+
+    expect((await call('POST', '/api/bills', salesmanToken, { customer_id: customerId, items })).status).toBe(403);
+    expect((await call('GET', `/api/bills/${billId}`, otherToken)).status).toBe(404);
+    expect((await call('POST', '/api/bills/preview', ownerToken, { items: [{ ...items[0], gst_rate: 7 }] })).status).toBe(400);
+
+    const cancel = await call('POST', `/api/bills/${billId}/cancel`, ownerToken, { reason: 'Wrong quantity' });
+    expect(cancel.status).toBe(200);
+    expect((await call('POST', `/api/bills/${billId}/cancel`, ownerToken, { reason: 'again' })).status).toBe(409);
+    const afterCancel = (await call('GET', `/api/customers/${customerId}`, ownerToken)).body.balance_paise;
+    expect(afterCancel).toBe(after.balance_paise - 52_200);
+    await expect(db.query("UPDATE bills SET total_paise = 1 WHERE bill_no = 'SPD/102'")).rejects.toThrow(/immutable/);
+    const qr = await call('GET', `/api/customers/${customerId}/upi-qr`, ownerToken);
+    expect(qr.body.amount_paise).toBe(afterCancel);
+    expect(qr.body.svg).toContain('<svg');
+  });
+
+  it('plans beats, shows today\'s route, records visits and pins shops', async () => {
+    const beat = await call('POST', '/api/beats', ownerToken, { name: 'Karol Bagh Wed', salesman_id: salesmanId, weekdays: [3, 6] });
+    expect(beat.status).toBe(201);
+    const verma = (await call('GET', '/api/customers?search=verma', ownerToken)).body.customers[0];
+    expect((await call('PUT', `/api/beats/${beat.body.beat.id}/customers`, ownerToken, { customer_ids: [verma.id, customerId] })).status).toBe(200);
+    expect((await call('PATCH', `/api/settings/users/${salesmanId}`, ownerToken, { daily_target: '20000' })).body.user.daily_target_paise).toBe(2_000_000);
+
+    // 2026-11-25 is a Wednesday (weekday 3).
+    const route = await call('GET', '/api/field/today', salesmanToken);
+    expect(route.status).toBe(200);
+    expect(route.body.beats).toEqual([{ id: beat.body.beat.id, name: 'Karol Bagh Wed' }]);
+    expect(route.body.stops.map((s: { id: string }) => s.id)).toEqual([verma.id, customerId]);
+    expect(route.body.target_paise).toBe(2_000_000);
+    expect(route.body.collected_paise).toBeGreaterThan(0);
+
+    const ref = '0d4a9a39-7f1c-4a21-9c49-3a9b0f7e1a10';
+    const visit = { customer_id: verma.id, outcome: 'promised', note: 'Will pay Friday', lat: 28.6519, lng: 77.1909, accuracy_m: 15, client_ref: ref };
+    expect((await call('POST', '/api/visits', salesmanToken, visit)).status).toBe(201);
+    const dup = await call('POST', '/api/visits', salesmanToken, visit);
+    expect(dup.status).toBe(200);
+    expect(dup.body.duplicate).toBe(true);
+    const shop = (await call('GET', `/api/customers/${verma.id}`, ownerToken)).body;
+    expect(shop.customer).toMatchObject({ lat: 28.6519, lng: 77.1909 });
+    expect(shop.visits[0]).toMatchObject({ outcome: 'promised' });
+    expect(shop.beat.name).toBe('Karol Bagh Wed');
+    // A poor GPS fix never moves an already pinned shop.
+    await call('POST', '/api/visits', salesmanToken, { ...visit, client_ref: undefined, lat: 1, lng: 1, accuracy_m: 900, pin_shop: true });
+    expect((await call('GET', `/api/customers/${verma.id}`, ownerToken)).body.customer.lat).toBe(28.6519);
+
+    const after = await call('GET', '/api/field/today', salesmanToken);
+    expect(after.body.visited).toBe(1);
+    expect(after.body.stops[0].visit.outcome).toBe('promised');
+    // Thursday: no beat scheduled.
+    expect((await call('GET', '/api/field/today?date=2026-11-26', salesmanToken)).body.stops).toEqual([]);
+    expect((await call('GET', `/api/field/today?salesman_id=${salesmanId}`, ownerToken)).body.salesman.id).toBe(salesmanId);
+    expect((await call('GET', '/api/beats', ownerToken)).body.beats[0]).toMatchObject({ customer_count: 2, salesman_id: salesmanId });
+    expect((await call('GET', '/api/visits', salesmanToken)).body.visits).toHaveLength(2);
+    expect((await call('POST', '/api/beats', salesmanToken, { name: 'x' })).status).toBe(403);
+  });
+
+  it('reports trends, salesman performance, GST and aging', async () => {
+    const trend = await call('GET', '/api/reports/trend?from=2026-11-01&to=2026-11-25', ownerToken);
+    expect(trend.status).toBe(200);
+    expect(trend.body.days).toHaveLength(25);
+    expect(trend.body.collected_paise).toBe(trend.body.days.reduce((s: number, d: { collected_paise: number }) => s + d.collected_paise, 0));
+    expect(trend.body.by_mode.length).toBeGreaterThan(0);
+    const sm = await call('GET', '/api/reports/salesmen?from=2026-11-19&to=2026-11-25', ownerToken);
+    const me = sm.body.salesmen.find((s: { id: string }) => s.id === salesmanId);
+    expect(me).toMatchObject({ visits: 2, outcomes: { promised: 2 } });
+    expect(me.target_paise).toBe(2_000_000 * me.work_days);
+    const gst = await call('GET', '/api/reports/gst?from=2026-11-01&to=2026-11-30', ownerToken);
+    expect(gst.body.totals).toMatchObject({ bills: 1, cancelled: 1 });
+    expect(gst.body.by_rate).toEqual([{ gst_rate: 12, taxable_paise: 25_500, tax_paise: 3_060 }]);
+    const aging = await call('GET', '/api/reports/aging', ownerToken);
+    expect(aging.body.customers.length).toBeGreaterThan(0);
+    expect((await call('GET', '/api/reports/trend?from=2026-12-01&to=2026-11-01', ownerToken)).status).toBe(400);
+    expect((await call('GET', '/api/reports/gst', salesmanToken)).status).toBe(403);
+  });
+
   it('reports health', async () => {
     expect((await call('GET', '/healthz')).body).toEqual({ ok: true });
   });

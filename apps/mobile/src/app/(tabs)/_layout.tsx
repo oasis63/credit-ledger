@@ -1,13 +1,12 @@
 import type { ColorValue } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router/js-tabs';
+import { Ionicons, type IconName } from '../../components/ui';
 import { useSession } from '../../lib/session';
 import { colors } from '../../lib/theme';
 
-type IconName = keyof typeof Ionicons.glyphMap;
-const icon = (name: IconName) =>
-  function TabIcon({ color, size }: { color: ColorValue; size: number }) {
-    return <Ionicons name={name} color={typeof color === 'string' ? color : colors.muted} size={size} />;
+const icon = (outline: IconName, filled: IconName) =>
+  function TabIcon({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) {
+    return <Ionicons name={focused ? filled : outline} color={typeof color === 'string' ? color : colors.muted} size={size} />;
   };
 
 export default function TabLayout() {
@@ -16,22 +15,24 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.brand,
-        headerStyle: { backgroundColor: colors.card },
+        tabBarInactiveTintColor: colors.faint,
+        tabBarStyle: { height: 62, paddingTop: 6, paddingBottom: 8, borderTopColor: colors.line },
+        tabBarLabelStyle: { fontSize: 11.5, fontWeight: '700' },
+        headerStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '800', fontSize: 20, color: colors.ink },
         headerTintColor: colors.ink,
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: 'Customers', tabBarIcon: icon('people-outline') }} />
-      <Tabs.Screen name="collect" options={{ title: 'Collect', tabBarIcon: icon('cash-outline') }} />
+      <Tabs.Screen name="index" options={{ title: 'Today', headerShown: false, tabBarIcon: icon('navigate-circle-outline', 'navigate-circle') }} />
+      <Tabs.Screen name="customers" options={{ title: 'Customers', tabBarIcon: icon('people-outline', 'people') }} />
+      <Tabs.Screen name="collect" options={{ title: 'Collect', tabBarIcon: icon('wallet-outline', 'wallet') }} />
       <Tabs.Screen
         name="sync"
-        options={{
-          title: 'Sync',
-          tabBarIcon: icon('cloud-upload-outline'),
-          tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
-        }}
+        options={{ title: 'Sync', tabBarIcon: icon('cloud-upload-outline', 'cloud-upload'), tabBarBadge: pendingCount > 0 ? pendingCount : undefined }}
       />
-      <Tabs.Screen name="account" options={{ title: 'Account', tabBarIcon: icon('person-circle-outline') }} />
+      <Tabs.Screen name="account" options={{ title: 'Me', tabBarIcon: icon('person-circle-outline', 'person-circle') }} />
     </Tabs>
   );
 }

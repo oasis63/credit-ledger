@@ -4,21 +4,14 @@ The field app for salesmen and owners. It shares money formatting, API types, th
 
 ## What it does
 
-| Screen | Purpose |
-|---|---|
-| **Customers** | All shops with balance, overdue amount and a risk flag (Good / Watch / Stop credit). Search, sort by most overdue, pull to refresh. Works offline from the last saved copy. |
-| **Customer** | Balance, credit limit, *why* the risk flag is set, aging buckets, recent entries. Record a collection, send the statement link on WhatsApp, and (owner/accountant) send the official reminder. |
-| **Collect** | Record cash, cheque or UPI. **Works offline.** The shop gets a WhatsApp receipt as soon as it syncs. |
-| **Sync** | What's still on the phone, what's synced (with receipt number), and anything the server rejected (retry or discard). |
-| **Account** | Who's signed in, server, version, sign out (blocked while collections are unsynced). |
+- **Today:** the salesman's route for the day (beats planned on the web), in visiting order, with the next stop, collected vs daily target and overdue on the route.
+- **Check in** at a shop: what happened (collected, promised, order taken, no payment, owner absent, shop closed), a note and a GPS fix. The first check-in pins the shop on the office map.
+- **Collect** cash, UPI or cheque. The shop gets a WhatsApp receipt; the salesman can also share a PDF receipt.
+- **Customers:** balance, ageing, credit limit, statement, bills, visits. Call, WhatsApp the statement link, directions, and a **UPI QR** to scan and pay on the spot.
+- **Bills:** view any GST bill and share it as a PDF.
+- **Works offline.** Collections and visits are saved on the phone and sync in order when the connection returns. A retried sync can never record a payment twice.
 
-### How offline collections stay safe
-
-1. Each collection gets a random ID (`client_ref`) on the phone and is saved in SQLite **before** anything is sent.
-2. The app syncs when you record, when the connection returns, when the app comes to the foreground, and every 2 minutes.
-3. If the connection drops mid-sync and the app retries, the server sees the same `client_ref` and returns the original entry instead of recording the payment twice (tested in `apps/api/test/api.test.ts` and `packages/shared/test/shared.test.ts`).
-4. The collection date is the day it was collected, not the day it synced (the server accepts dates up to 7 days back).
-5. The login token is kept in the Android Keystore (`expo-secure-store`), not in plain storage.
+Location is only read while checking in ("while using the app"); the app never asks for background location.
 
 ## Run it during development
 
@@ -77,6 +70,10 @@ src/lib/
   secure.ts           Token in Keystore (secure.web.ts for browser preview)
 src/components/ui.tsx Buttons, fields, badges, banners
 ```
+
+## After updating
+
+This version adds native modules (location, PDF printing, sharing, SVG). Build a new development build (`eas build --profile development --platform android`) before running it on a phone.
 
 ## Next steps
 

@@ -59,6 +59,26 @@ const collection = (ref: string): NewCollection => ({
 });
 
 describe('offline outbox', () => {
+  it('syncs visits and collections in the order they happened, to the right endpoints', async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string, init: { body: string }) => {
+      urls.push(url);
+      const body = JSON.parse(init.body) as { client_ref: string; collected_on?: string };
+      return url.endsWith('/api/visits')
+        ? new Response(JSON.stringify({ visit: { id: 'v', outcome: 'promised' }, duplicate: false }), { status: 201 })
+        : new Response(JSON.stringify({ entry: { id: 'e', amount_paise: 1, entry_date: body.collected_on }, receipt: { number: 'R9', sent: true, error: null }, duplicate: false }), { status: 201 });
+    }) as unknown as typeof fetch;
+    const api = new ApiClient({ baseUrl: 'https://x', fetchImpl, getToken: () => 't' });
+    let t = 0;
+    const outbox = new Outbox(new MemoryOutboxStore(), () => new Date(Date.UTC(2026, 10, 25, 10, 0, t++)));
+    await outbox.addVisit({ customer_id: 'c1', outcome: 'promised', client_ref: 'v1', visited_on: '2026-11-25' }, 'Shop A');
+    await outbox.add(collection('c2'), 'Shop B');
+    expect(await outbox.sync(api)).toEqual({ synced: 2, failed: 0, remaining: 0, stoppedEarly: false });
+    expect(urls).toEqual(['https://x/api/visits', 'https://x/api/collections']);
+    const items = await outbox.list();
+    expect(items.map((i) => [i.kind, i.receipt_no])).toEqual([['visit', null], ['collection', 'R9']]);
+  });
+
   it('queues offline, stops at network errors, and syncs in order later', async () => {
     const outbox = new Outbox(new MemoryOutboxStore());
     await outbox.add(collection('a'), 'Shop A');

@@ -5,6 +5,7 @@ import { audit, withTenant } from '../db.js';
 import { aging, balanceOf, overdueTotal, statement, todayIso } from '../domain/ledger.js';
 import { verifyStatementToken } from '../domain/statementToken.js';
 import { buildUpiLink } from '../domain/upi.js';
+import { qrSvg } from '../domain/qr.js';
 import { ENTRY_COLUMNS } from '../services/customers.js';
 import { DISPUTE_REASONS } from './disputes.js';
 
@@ -72,6 +73,7 @@ export async function publicRoutes(app: FastifyInstance) {
         lines: lines.slice(-200),
         disputes,
         upi_link: upi,
+        upi_qr_svg: upi ? await qrSvg(upi) : null,
         pay_amount_paise: payAmount > 0 ? payAmount : 0,
       };
     });

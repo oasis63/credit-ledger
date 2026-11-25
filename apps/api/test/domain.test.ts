@@ -195,3 +195,41 @@ describe('risk thresholds', () => {
     expect(r.flag).toBe('amber');
   });
 });
+
+import { amountInWords, computeBill, isInterstate } from '../src/domain/gst.js';
+
+describe('GST bills', () => {
+  it('splits CGST/SGST equally, rounds to the rupee and groups by rate', () => {
+    const b = computeBill(
+      [
+        { description: 'A', qty: 3, rate_paise: 3333, gst_rate: 18 },
+        { description: 'B', qty: 1.25, rate_paise: 8000, discount_pct: 5, gst_rate: 5 },
+      ],
+      { interstate: false },
+    );
+    expect(b.lines[0]).toMatchObject({ gross_paise: 9999, taxable_paise: 9999, cgst_paise: 900, sgst_paise: 900 });
+    expect(b.lines[1]).toMatchObject({ gross_paise: 10000, discount_paise: 500, taxable_paise: 9500, cgst_paise: 238 });
+    expect(b.cgst_paise).toBe(b.sgst_paise);
+    expect(b.total_paise % 100).toBe(0);
+    expect(b.total_paise - b.round_off_paise).toBe(b.taxable_paise + b.tax_paise);
+    expect(b.by_rate.map((r) => r.gst_rate)).toEqual([5, 18]);
+  });
+
+  it('uses IGST for inter-state supply and validates input', () => {
+    const b = computeBill([{ description: 'A', qty: 1, rate_paise: 10000, gst_rate: 28 }], { interstate: true });
+    expect(b).toMatchObject({ igst_paise: 2800, cgst_paise: 0, total_paise: 12800 });
+    expect(() => computeBill([], { interstate: false })).toThrow(/at least one/);
+    expect(() => computeBill([{ description: 'A', qty: 1, rate_paise: 100, gst_rate: 7 }], { interstate: false })).toThrow(/not valid/);
+    expect(() => computeBill([{ description: 'A', qty: 1.0001, rate_paise: 100, gst_rate: 5 }], { interstate: false })).toThrow(/3 decimals/);
+    expect(() => computeBill([{ description: 'A', qty: 0, rate_paise: 100, gst_rate: 5 }], { interstate: false })).toThrow(/more than 0/);
+    expect(isInterstate('27', '29ABCDE1234F1Z5')).toBe(true);
+    expect(isInterstate('27', '27ABCDE1234F1Z5')).toBe(false);
+    expect(isInterstate(null, '29ABCDE1234F1Z5')).toBe(false);
+  });
+
+  it('writes amounts in Indian words', () => {
+    expect(amountInWords(1_23_45_678_90)).toBe('One Crore Twenty Three Lakh Forty Five Thousand Six Hundred Seventy Eight Rupees and Ninety Paise Only');
+    expect(amountInWords(100)).toBe('One Rupees Only');
+    expect(amountInWords(0)).toBe('Zero Rupees Only');
+  });
+});

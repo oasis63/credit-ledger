@@ -16,7 +16,9 @@ function RootStack() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.card },
+        headerStyle: { backgroundColor: colors.bg },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '800', color: colors.ink },
         headerTintColor: colors.ink,
         headerTransparent: false,
         contentStyle: { backgroundColor: colors.bg },
@@ -24,7 +26,9 @@ function RootStack() {
     >
       <Stack.Protected guard={user !== null} redirectTo="/login">
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="customer/[id]" options={{ title: 'Customer' }} />
+        <Stack.Screen name="customer/[id]" options={{ title: '' }} />
+        <Stack.Screen name="visit/[id]" options={{ title: 'Check in', presentation: 'modal' }} />
+        <Stack.Screen name="bill/[id]" options={{ title: 'Bill' }} />
       </Stack.Protected>
       <Stack.Protected guard={user === null} redirectTo="/">
         <Stack.Screen name="login" options={{ headerShown: false }} />

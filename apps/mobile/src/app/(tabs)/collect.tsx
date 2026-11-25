@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { formatRupees, paiseToRupeeString, parseRupees, type CustomerSummary } from '@credit-ledger/shared';
-import { Banner, Button, Card, Field, RiskBadge, Segmented, styles as ui } from '../../components/ui';
+import { formatRupees, paiseToRupeeString, parseRupees, type CustomerSummary, type NewCollection } from '@credit-ledger/shared';
+import { Avatar, Banner, Button, Card, Field, Ionicons, RiskBadge, SearchBox, Segmented, styles as ui } from '../../components/ui';
+import { receiptHtml } from '../../lib/receipt';
+import { sharePdf } from '../../lib/share';
 import { useSession } from '../../lib/session';
 import { colors, space } from '../../lib/theme';
 
@@ -10,7 +12,7 @@ type Mode = 'cash' | 'cheque' | 'upi';
 
 export default function Collect() {
   const params = useLocalSearchParams<{ customerId?: string }>();
-  const { loadCustomers, recordCollection, online } = useSession();
+  const { loadCustomers, recordCollection, online, user } = useSession();
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
   const [customerId, setCustomerId] = useState<string | null>(params.customerId ?? null);
   const [search, setSearch] = useState('');
@@ -21,6 +23,7 @@ export default function Collect() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [last, setLast] = useState<{ payload: NewCollection; name: string } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,7 +59,7 @@ export default function Collect() {
 
     setBusy(true);
     try {
-      await recordCollection(
+      const item = await recordCollection(
         {
           customer_id: customer.id,
           amount: paiseToRupeeString(paise),
@@ -71,6 +74,7 @@ export default function Collect() {
           ? `${formatRupees(paise)} from ${customer.name} recorded. The shop will get a WhatsApp receipt.`
           : `${formatRupees(paise)} from ${customer.name} saved on this phone. It will sync and send the receipt when you're back online.`,
       );
+      setLast({ payload: item.payload as NewCollection, name: customer.name });
       setAmount('');
       setReference('');
       setNote('');
@@ -85,11 +89,30 @@ export default function Collect() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ padding: space.lg }} keyboardShouldPersistTaps="handled">
         {!online && <Banner tone="warn">You're offline. Collections are saved on this phone and sync automatically later.</Banner>}
-        {done && <Banner tone="good">{done}</Banner>}
+        {done && (
+          <Card style={{ borderColor: colors.good, borderWidth: 1.5 }}>
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+              <Ionicons name="checkmark-circle" size={26} color={colors.good} />
+              <Text style={{ flex: 1, color: colors.ink, fontSize: 15, lineHeight: 21 }}>{done}</Text>
+            </View>
+            {last && (
+              <View style={{ marginTop: space.md }}>
+                <Button
+                  title="Share receipt PDF"
+                  icon="share-social"
+                  variant="secondary"
+                  compact
+                  onPress={() => void sharePdf(receiptHtml(last.payload, last.name, user?.name ?? '', null), 'Payment receipt')}
+                />
+              </View>
+            )}
+          </Card>
+        )}
 
         <Text style={ui.label}>Shop</Text>
         {customer ? (
-          <Card style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Card style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <Avatar name={customer.name} />
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 17, fontWeight: '700', color: colors.ink }}>{customer.name}</Text>
               <Text style={{ color: colors.muted }}>
@@ -106,14 +129,7 @@ export default function Collect() {
           </Card>
         ) : (
           <View style={{ marginBottom: space.md }}>
-            <TextInput
-              placeholder="Type shop name or phone"
-              placeholderTextColor="#98a2a0"
-              value={search}
-              onChangeText={setSearch}
-              style={[ui.input, errors.customer ? { borderColor: colors.bad } : null]}
-              accessibilityLabel="Search shop"
-            />
+            <SearchBox placeholder="Type shop name or phone" value={search} onChangeText={setSearch} accessibilityLabel="Search shop" />
             {errors.customer && <Text style={ui.error}>{errors.customer}</Text>}
             {matches.map((c) => (
               <Pressable
@@ -123,11 +139,14 @@ export default function Collect() {
                   setDone(null);
                   setErrors((e) => ({ ...e, customer: '' }));
                 }}
-                style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line }}
+                style={{ paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: colors.line, flexDirection: 'row', gap: 10, alignItems: 'center' }}
                 accessibilityRole="button"
               >
-                <Text style={{ fontSize: 16, color: colors.ink }}>{c.name}</Text>
-                <Text style={{ color: colors.muted, fontSize: 13 }}>Owes {formatRupees(c.balance_paise)}</Text>
+                <Avatar name={c.name} size={34} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 16, color: colors.ink, fontWeight: '600' }}>{c.name}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 13 }}>Owes {formatRupees(c.balance_paise)}{c.area ? ` · ${c.area}` : ''}</Text>
+                </View>
               </Pressable>
             ))}
           </View>
@@ -140,15 +159,20 @@ export default function Collect() {
           keyboardType="decimal-pad"
           placeholder="0"
           error={errors.amount}
-          style={{ fontSize: 24, fontWeight: '700' }}
+          style={{ fontSize: 30, fontWeight: '800', paddingVertical: 14 }}
         />
+        {customer && customer.overdue_paise > 0 && !amount && (
+          <Pressable onPress={() => setAmount(paiseToRupeeString(customer.overdue_paise))} style={{ marginTop: -6, marginBottom: space.md }}>
+            <Text style={{ color: colors.brandDark, fontWeight: '700' }}>Use overdue amount {formatRupees(customer.overdue_paise)}</Text>
+          </Pressable>
+        )}
 
         <Text style={ui.label}>Paid by</Text>
         <Segmented<Mode>
           options={[
-            { value: 'cash', label: 'Cash' },
-            { value: 'cheque', label: 'Cheque' },
-            { value: 'upi', label: 'UPI' },
+            { value: 'cash', label: 'Cash', icon: 'cash-outline' },
+            { value: 'upi', label: 'UPI', icon: 'phone-portrait-outline' },
+            { value: 'cheque', label: 'Cheque', icon: 'document-text-outline' },
           ]}
           value={mode}
           onChange={setMode}
@@ -165,7 +189,7 @@ export default function Collect() {
         )}
         <Field label="Note (optional)" value={note} onChangeText={setNote} placeholder="e.g. part payment for INV-140" />
 
-        <Button title="Record and send receipt" onPress={submit} busy={busy} />
+        <Button title="Record and send receipt" icon="checkmark-circle" onPress={submit} busy={busy} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "migrate": "tsx src/migrate.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx src/seed.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.4.3",
@@ -19,11 +20,13 @@
     "@fastify/rate-limit": "^11.3.0",
     "fastify": "^5.12.8",
     "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/pg": "^8.11.10",
+    "@types/qrcode": "^1.5.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

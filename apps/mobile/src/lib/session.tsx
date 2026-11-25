@@ -9,7 +9,9 @@ import {
   todayInIndia,
   type CustomerDetail,
   type CustomerSummary,
+  type FieldToday,
   type NewCollection,
+  type NewVisit,
   type OutboxItem,
   type SyncReport,
   type User,
@@ -41,7 +43,9 @@ interface SessionValue {
   signOut(): Promise<void>;
   loadCustomers(): Promise<Loaded<CustomerSummary[]>>;
   loadCustomer(id: string): Promise<Loaded<CustomerDetail>>;
+  loadToday(): Promise<Loaded<FieldToday>>;
   recordCollection(input: Omit<NewCollection, 'client_ref' | 'collected_on'>, customerName: string): Promise<OutboxItem>;
+  recordVisit(input: Omit<NewVisit, 'client_ref' | 'visited_on'>, customerName: string): Promise<OutboxItem>;
   syncNow(): Promise<SyncReport | null>;
   retryItem(clientRef: string): Promise<void>;
   discardItem(clientRef: string): Promise<void>;
@@ -160,6 +164,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
   const loadCustomer = useCallback((id: string) => loadWithCache(`customer:${id}`, () => api.customer(id)), [api, loadWithCache]);
 
+  const loadToday = useCallback(() => loadWithCache('today', () => api.fieldToday()), [api, loadWithCache]);
+
+  const recordVisit = useCallback<SessionValue['recordVisit']>(
+    async (input, customerName) => {
+      const item = await outbox.addVisit({ ...input, client_ref: Crypto.randomUUID(), visited_on: todayInIndia() }, customerName);
+      await refreshOutbox();
+      void syncNow();
+      return item;
+    },
+    [outbox, refreshOutbox, syncNow],
+  );
+
   const recordCollection = useCallback<SessionValue['recordCollection']>(
     async (input, customerName) => {
       const item = await outbox.add(
@@ -202,7 +218,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signOut,
     loadCustomers,
     loadCustomer,
+    loadToday,
     recordCollection,
+    recordVisit,
     syncNow,
     retryItem,
     discardItem,
