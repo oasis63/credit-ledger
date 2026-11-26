@@ -145,13 +145,17 @@ The agent matches ledgers by name, links them to existing customers by mobile nu
 - Every write is recorded in `audit_log`.
 - Helmet headers, CORS allow-list, rate limiting (stricter on login and public links), 1 MB body limit.
 
+## Deploy
+
+[DEPLOY.md](DEPLOY.md) covers going live: a VPS with automatic HTTPS (`deploy/vps`: Docker Compose + Caddy, `./setup.sh`), images and the Tally agent built by GitHub Actions, backups, and publishing the Android and iOS apps.
+
 ## Before you go live (things only you can do)
 
 - [ ] Real WhatsApp Business account, approved templates, and Meta Tech Provider status if you send from each distributor's own number.
-- [ ] A domain with HTTPS (e.g. Caddy or a cloud load balancer in front of the `web` container), hosted in India.
+- [ ] A domain with HTTPS, hosted in India (`deploy/vps` sets up Caddy for you).
 - [ ] Managed Postgres with daily backups and a tested restore.
 - [ ] Error monitoring (e.g. Sentry) and uptime alerts on `/healthz`.
-- [ ] Privacy policy and terms (DPDP Act): retailer phone numbers are personal data.
+- [ ] Privacy policy and terms (DPDP Act): retailer phone numbers are personal data. A draft is in `docs/PRIVACY.md`.
 - [ ] Code-signing certificate for the Windows agent, so SmartScreen and antivirus don't block it.
 - [ ] Security review / penetration test before onboarding paying customers.
 - [ ] Check your employer's policy on outside work before selling.

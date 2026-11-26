@@ -1,0 +1,14 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN automatically.
+# Point the domain's DNS A record at this server before starting.
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	# nginx in the web container serves the app and forwards /api, /webhooks and /healthz to the API.
+	reverse_proxy web:8080
+}
+
+# Other apps on the same server (see DEPLOY.md).
+import /etc/caddy/extra/*.caddy

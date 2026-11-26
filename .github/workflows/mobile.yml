@@ -1,0 +1,45 @@
+# Builds the phone apps on Expo's servers (EAS) and optionally sends them to the stores.
+# The API address baked into each build comes from eas.json (EXPO_PUBLIC_API_URL per profile).
+# One-time: add an EXPO_TOKEN secret (expo.dev -> Account settings -> Access tokens).
+# Run it from the Actions tab, or push a tag like mobile-v1.0.0.
+name: Mobile build
+
+on:
+  push:
+    tags: ['mobile-v*']
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: android, ios or all
+        default: android
+      profile:
+        description: preview (APK to install directly) or production (store build)
+        default: production
+      submit:
+        description: Send the build to Play Console / App Store Connect
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - name: Build
+        run: >
+          eas build --non-interactive --no-wait
+          --platform ${{ inputs.platform || 'android' }}
+          --profile ${{ inputs.profile || 'production' }}
+          ${{ (inputs.submit || startsWith(github.ref, 'refs/tags/')) && '--auto-submit' || '' }}
