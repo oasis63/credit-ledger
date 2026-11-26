@@ -168,3 +168,4 @@ The agent matches ledgers by name, links them to existing customers by mobile nu
 - Tally sync is balances only; invoice-level sync would let the app post invoices automatically.
 - Marg ERP integration (for pharma distributors) needs API access through a Marg partner.
 - JWTs are stored in `localStorage`; consider httpOnly cookies with CSRF protection for higher security.
+# credit-ledger
